@@ -1,0 +1,3 @@
+GET      /                          controllers.CityController.loggedIn
+GET      /reg                       controllers.CityController.regNewUser
+POST     /create/                   controllers.CityController.createNewUser
