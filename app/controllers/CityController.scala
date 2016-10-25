@@ -15,7 +15,7 @@ import utils.Errors
 import scala.concurrent.{ExecutionContext, Future}
 import play.api.data._
 import play.api.data.Forms._
-import reactivemongo.bson.BSONObjectID
+import reactivemongo.bson.{BSONDocument, BSONDocumentWriter, BSONObjectID, BSONValue}
 
 
 /**
@@ -25,7 +25,6 @@ import reactivemongo.bson.BSONObjectID
 @Singleton
 class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit exec: ExecutionContext) extends Controller with MongoController with ReactiveMongoComponents {
 
-
   val userRegForm = Form(
     mapping(
       "username" -> nonEmptyText,
@@ -33,7 +32,6 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
       "password" -> text
     )(User.apply)(User.unapply)
   )
-
 
   def personsFuture: Future[JSONCollection] = database.map(_.collection[JSONCollection]("persons"))
 
@@ -45,16 +43,26 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
     implicit request =>
       request.session.get("logged_in").map(elem => elem match {
         case "true" => {
-          val uid = request.session.get("user_id").get
-          val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).cursor[User](ReadPreference.primary).collect[List]())
-          answ.map(elem => elem match {
-            case user:List[User] => Ok(views.html.logged_in(user.head.username, user.head.email))
-            case user:List[User] if user.isEmpty => Ok(views.html.logged_in("test", "test"))
-          })
+          val uid:String = request.session.get("user_id").get
+          val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).one[User])
+          answ.map {
+            case Some(user) => Ok(views.html.logged_in(user.username, user.email))
+            case _ => Ok(views.html.logged_in("test", "test"))
+          }
         }
         case "false" => Future(Redirect("/login/"))
       }
     ).getOrElse(Future(Redirect("/login/")))
+  }
+
+  implicit val userWrites = new Writes[User] {
+    def writes(user: User):JsObject = Json.obj(
+      "_id" -> BSONFormats.toJSON(BSONObjectID.generate),
+      "username" -> user.username,
+      "email" -> user.email,
+      "password" -> user.password,
+      "apartment" -> JsArray()
+    )
   }
 
   def createNewUser = Action.async {
@@ -65,10 +73,8 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
         Future(BadRequest("incorrect"))
       },
       userData => {
-        val json = Json.obj(
-          "username" -> userData.username,
-          "email" -> userData.email,
-          "password" -> userData.password)
+
+        val json:JsObject = Json.toJson(userData).as[JsObject]
 
         val answ = personsFuture.flatMap(elem => {
           elem.insert(json)
@@ -76,7 +82,7 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
 
         answ.map(elem => {
           elem.errmsg.getOrElse("without errors") match {
-            case "without errors" => println("Object ID : " + elem); Ok("without errors").withSession("logged_in" -> "true", "user_id" -> "580e02dfb9a33b158ccca0c2")
+            case "without errors" => Ok("without errors").withSession("logged_in" -> "true", "user_id" -> (json \ "_id" \ "$oid").asOpt[String].get); Redirect("/")
             case _ => BadRequest("Errors while adding")
           }
         })

@@ -11,5 +11,4 @@ object User {
 
 object Apartment {
   implicit val formatter = Json.format[Apartment]
-
 }
