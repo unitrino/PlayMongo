@@ -1,3 +1,5 @@
 GET      /                          controllers.CityController.loggedIn
 GET      /reg                       controllers.CityController.regNewUser
+GET      /user/:id                  controllers.CityController.getUserInfo(id:String)
 POST     /create/                   controllers.CityController.createNewUser
+GET      /all                       controllers.CityController.getAllApartments

@@ -19,9 +19,11 @@ import reactivemongo.bson.{BSONDocument, BSONDocumentWriter, BSONObjectID, BSONV
 
 
 /**
-  * Simple controller that directly stores and retrieves [models.City] instances into a MongoDB Collection
-  * Input is first converted into a city and then the city is converted to JsObject to be stored in MongoDB
-  */
+  *
+db.getCollection('persons').find({"apartments":{$elemMatch:{"$exists":true}}})
+db.getCollection('persons').find({"apartments":{$elemMatch:{"$exists":true}}}).map(function(elem) { return elem.apartments;})[0]
+
+*/
 @Singleton
 class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit exec: ExecutionContext) extends Controller with MongoController with ReactiveMongoComponents {
 
@@ -53,6 +55,21 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
         case "false" => Future(Redirect("/login/"))
       }
     ).getOrElse(Future(Redirect("/login/")))
+  }
+
+  def getAllApartments = Action.async {
+    implicit request =>
+      val answ = personsFuture.flatMap(_.find(Json.obj("apartments" -> Json.obj("$exists" -> "true"))).cursor[JsObject]().collect[List](0))
+      answ.map(elem => { println(elem.map( one => (one \ "apartments").get)); Ok(views.html.logged_in( elem.map( one => (one \ "apartments").as[JsArray]).reduceLeft((a1:JsArray, a2:JsArray) => a1 ++ a2).toString, ""))})
+  }
+
+  def getUserInfo(id: String) = Action.async {
+    implicit request =>
+      val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(id))).one[User])
+      answ.map {
+        case Some(user) => Ok(views.html.logged_in(user.username, user.email))
+        case _ => Ok(views.html.logged_in("Unknown", "Unknown"))
+      }
   }
 
   implicit val userWrites = new Writes[User] {
@@ -89,6 +106,8 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
       }
     )
   }
+
+
 
 
 //  def create(name: String, population: Int) = Action.async {
