@@ -1,8 +1,11 @@
 <html>
     <body>
-        <form action="/create_ap/" method="post">
+        <form action="/create_ap/" method="post" enctype="multipart/form-data">
             <input name="name">
             <input name="description">
+            <input type="file" name="pic1">
+            <input type="file" name="pic2">
+            <input type="file" name="pic3">
             <input type="submit" value="Sumb">
         </form>
     </body>

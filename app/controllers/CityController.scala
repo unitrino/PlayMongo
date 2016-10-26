@@ -16,12 +16,14 @@ import scala.concurrent.{ExecutionContext, Future}
 import play.api.data._
 import play.api.data.Forms._
 import reactivemongo.bson.{BSONDocument, BSONDocumentWriter, BSONObjectID, BSONValue}
+import java.io.File
 
 
 /**
   *
 db.getCollection('persons').find({"apartments":{$elemMatch:{"$exists":true}}})
 db.getCollection('persons').find({"apartments":{$elemMatch:{"$exists":true}}}).map(function(elem) { return elem.apartments;})[0]
+Ok.sendFile(new java.io.File("/tmp/fileToServe.pdf"))
 
 */
 @Singleton
@@ -33,13 +35,6 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
       "email" -> email,
       "password" -> text
     )(User.apply)(User.unapply)
-  )
-
-  val apartmentForm = Form(
-    mapping(
-      "name" -> nonEmptyText,
-      "description" -> nonEmptyText
-    )(Apartment.apply)(Apartment.unapply)
   )
 
   def personsFuture: Future[JSONCollection] = database.map(_.collection[JSONCollection]("persons"))
@@ -58,22 +53,34 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
         val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).one[User])
         answ.map {
           case Some(user) => {
-            apartmentForm.bindFromRequest()
+            request.body.asMultipartFormData match {
+              case Some(apartmentForm) => {
+                val apartmentData = apartmentForm.dataParts
 
-            apartmentForm.bindFromRequest.fold(
-              formWithErrors => {
-                Future(BadRequest("incorrect form"))
-              },
-              apartmentData => {
-                val json = Json.obj("apartments" -> Json.toJson(apartmentData))
-                val modifier = BSONDocument("$push" -> json)
-                val selector = BSONDocument("_id" -> BSONObjectID(uid))
-                val futureUpdate = personsFuture.map(coll => coll.update(selector, modifier))
+                if (apartmentData("name").length == 0 || apartmentData("description").length == 0 ) {
+                  println(apartmentData("name") + " " + apartmentData("description"))
+                  BadRequest("incorrect form")
+                }
+                else {
+                  val listOfImages: Seq[String] = apartmentForm.files.map(indx => {
+                      val filenameRandom: String = scala.util.Random.alphanumeric.take(10).mkString("") + indx.filename
+                      val fullPath = s"/home/incode51/IdeaProjects/MongoTest/app/images/$filenameRandom"
+                      indx.ref.moveTo(new File(fullPath))
+                      fullPath
+                    }
+                  )
+
+                  val json = Json.obj("apartments" -> Json.obj("name" -> apartmentData("name").mkString(""), "description" -> apartmentData("description").mkString(""), "images" -> Json.toJson(listOfImages)))
+                  val modifier = BSONDocument("$push" -> json)
+                  val selector = BSONDocument("_id" -> BSONObjectID(uid))
+                  val futureUpdate = personsFuture.map(coll => coll.update(selector, modifier))
+                  Ok("OK")
+                }
               }
-            )
-            Ok("OK")
+              case None => BadRequest("incorrect form2")
+            }
           }
-          case _ => Ok(views.html.logged_in("test", "test"))
+          case None => BadRequest("incorrect form1")
         }
   }
 
