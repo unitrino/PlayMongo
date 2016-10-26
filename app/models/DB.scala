@@ -2,7 +2,7 @@ package models
 
 import play.api.libs.json.Json
 
-case class Apartment(owner:String, name: String, description: String)
+case class Apartment(name: String, description: String)
 case class User(username: String, email: String, password: String)
 
 object User {
