@@ -47,6 +47,10 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
     Ok(views.html.add_apartment())
   }
 
+  def getImage(path:String) = Action.async{
+    Future(Ok.sendFile(new java.io.File(s"/home/incode51/IdeaProjects/MongoTest/app/images/$path")).withHeaders(CONTENT_DISPOSITION -> "inline"))
+  }
+
   def createApartment = Action.async {
     implicit request =>
         val uid:String = request.session.get("user_id").get
@@ -70,7 +74,12 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
                     }
                   )
 
-                  val json = Json.obj("apartments" -> Json.obj("name" -> apartmentData("name").mkString(""), "description" -> apartmentData("description").mkString(""), "images" -> Json.toJson(listOfImages)))
+                  val newApartment = Json.obj("_id" -> BSONFormats.toJSON(BSONObjectID.generate),
+                    "name" -> apartmentData("name").mkString(""),
+                    "description" -> apartmentData("description").mkString(""),
+                    "images" -> Json.toJson(listOfImages))
+
+                  val json = Json.obj("apartments" -> newApartment)
                   val modifier = BSONDocument("$push" -> json)
                   val selector = BSONDocument("_id" -> BSONObjectID(uid))
                   val futureUpdate = personsFuture.map(coll => coll.update(selector, modifier))

@@ -5,3 +5,4 @@ POST     /create/                   controllers.CityController.createNewUser
 GET      /all                       controllers.CityController.getAllApartments
 POST     /create_ap/                controllers.CityController.createApartment
 GET      /createap                  controllers.CityController.createAp
+GET      /get_image/:path           controllers.CityController.getImage(path:String)
