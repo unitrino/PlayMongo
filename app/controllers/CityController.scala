@@ -20,12 +20,11 @@ import java.io.File
 
 
 /**
-  *
 db.getCollection('persons').find({"apartments":{$elemMatch:{"$exists":true}}})
 db.getCollection('persons').find({"apartments":{$elemMatch:{"$exists":true}}}).map(function(elem) { return elem.apartments;})[0]
 Ok.sendFile(new java.io.File("/tmp/fileToServe.pdf"))
-
 */
+
 @Singleton
 class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit exec: ExecutionContext) extends Controller with MongoController with ReactiveMongoComponents {
 
@@ -37,6 +36,32 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
     )(User.apply)(User.unapply)
   )
 
+  case class Logging[A](action: Action[A]) extends Action[A] {
+
+    def apply(request: Request[A]): Future[Result] = {
+      val ll = request.session.get("logged_in")
+      ll match {
+        case Some(elem) => {
+          if (elem == "true") {
+            val uid: String = request.session.get("user_id").get
+            val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).one[User])
+            answ.flatMap{
+              case Some(user) => println(user.username); action(request)
+              case None => Future(Redirect("/reg").withNewSession)
+            }
+          }
+          else {
+            Future(Redirect("/reg").withNewSession)
+          }
+        }
+        case None => Future(Redirect("/reg").withNewSession)
+      }
+    }
+
+    lazy val parser = action.parser
+  }
+
+
   def personsFuture: Future[JSONCollection] = database.map(_.collection[JSONCollection]("persons"))
 
   def regNewUser = Action {
@@ -47,67 +72,56 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
     Ok(views.html.add_apartment())
   }
 
-  def getImage(path:String) = Action.async{
+  def getImage(path: String) = Action.async {
     Future(Ok.sendFile(new java.io.File(s"/home/incode51/IdeaProjects/MongoTest/app/images/$path")).withHeaders(CONTENT_DISPOSITION -> "inline"))
   }
 
   def createApartment = Action.async {
     implicit request =>
-        val uid:String = request.session.get("user_id").get
-        val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).one[User])
-        answ.map {
-          case Some(user) => {
-            request.body.asMultipartFormData match {
-              case Some(apartmentForm) => {
-                val apartmentData = apartmentForm.dataParts
+      val uid: String = request.session.get("user_id").get
+      val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).one[User])
+      answ.map {
+        case Some(user) => {
+          request.body.asMultipartFormData match {
+            case Some(apartmentForm) => {
+              val apartmentData = apartmentForm.dataParts
 
-                if (apartmentData("name").length == 0 || apartmentData("description").length == 0 ) {
-                  println(apartmentData("name") + " " + apartmentData("description"))
-                  BadRequest("incorrect form")
-                }
-                else {
-                  val listOfImages: Seq[String] = apartmentForm.files.map(indx => {
-                      val filenameRandom: String = scala.util.Random.alphanumeric.take(10).mkString("") + indx.filename
-                      val fullPath = s"/home/incode51/IdeaProjects/MongoTest/app/images/$filenameRandom"
-                      indx.ref.moveTo(new File(fullPath))
-                      fullPath
-                    }
-                  )
-
-                  val newApartment = Json.obj("_id" -> BSONFormats.toJSON(BSONObjectID.generate),
-                    "name" -> apartmentData("name").mkString(""),
-                    "description" -> apartmentData("description").mkString(""),
-                    "images" -> Json.toJson(listOfImages))
-
-                  val json = Json.obj("apartments" -> newApartment)
-                  val modifier = BSONDocument("$push" -> json)
-                  val selector = BSONDocument("_id" -> BSONObjectID(uid))
-                  val futureUpdate = personsFuture.map(coll => coll.update(selector, modifier))
-                  Ok("OK")
-                }
+              if (apartmentData("name").length == 0 || apartmentData("description").length == 0) {
+                println(apartmentData("name") + " " + apartmentData("description"))
+                BadRequest("incorrect form")
               }
-              case None => BadRequest("incorrect form2")
+              else {
+                val listOfImages: Seq[String] = apartmentForm.files.map(indx => {
+                  val filenameRandom: String = scala.util.Random.alphanumeric.take(10).mkString("") + indx.filename
+                  val fullPath = s"/home/incode51/IdeaProjects/MongoTest/app/images/$filenameRandom"
+                  indx.ref.moveTo(new File(fullPath))
+                  fullPath
+                }
+                )
+
+                val newApartment = Json.obj("_id" -> BSONFormats.toJSON(BSONObjectID.generate),
+                  "name" -> apartmentData("name").mkString(""),
+                  "description" -> apartmentData("description").mkString(""),
+                  "images" -> Json.toJson(listOfImages))
+
+                val json = Json.obj("apartments" -> newApartment)
+                val modifier = BSONDocument("$push" -> json)
+                val selector = BSONDocument("_id" -> BSONObjectID(uid))
+                val futureUpdate = personsFuture.map(coll => coll.update(selector, modifier))
+                Ok("OK")
+              }
             }
+            case None => BadRequest("incorrect form2")
           }
-          case None => BadRequest("incorrect form1")
         }
+        case None => BadRequest("incorrect form1")
+      }
   }
 
-  def loggedIn = Action.async {
-    implicit request =>
-      request.session.get("logged_in").map(elem => elem match {
-        case "true" => {
-          val uid:String = request.session.get("user_id").get
-          println(uid)
-          val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).one[User])
-          answ.map {
-            case Some(user) => Ok(views.html.logged_in(user.username, user.email))
-            case _ => Ok(views.html.logged_in("test", "test"))
-          }
-        }
-        case "false" =>  println("FALSE");Future(Redirect("/reg"))
-      }
-    ).getOrElse(Future(Redirect("/reg")))
+  def loggedIn = Logging {
+      Action.async {
+        implicit request => Future(Ok(views.html.logged_in("logged in", "logged in")))
+    }
   }
 
   def getAllApartments = Action.async {
