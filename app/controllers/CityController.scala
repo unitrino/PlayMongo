@@ -39,8 +39,8 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
   case class Logging[A](action: Action[A]) extends Action[A] {
 
     def apply(request: Request[A]): Future[Result] = {
-      val ll = request.session.get("logged_in")
-      ll match {
+      val isLoggedIn = request.session.get("logged_in")
+      isLoggedIn match {
         case Some(elem) => {
           if (elem == "true") {
             val uid: String = request.session.get("user_id").get
