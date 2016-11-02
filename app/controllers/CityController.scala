@@ -46,7 +46,7 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
             val uid: String = request.session.get("user_id").get
             val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).one[User])
             answ.flatMap{
-              case Some(user) => println(user.username); action(request)
+              case Some(user) => println(user.username); action(request); //USER IS LOGGED IN
               case None => Future(Redirect("/reg").withNewSession)
             }
           }
@@ -96,8 +96,7 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
                   val fullPath = s"/home/incode51/IdeaProjects/MongoTest/app/images/$filenameRandom"
                   indx.ref.moveTo(new File(fullPath))
                   fullPath
-                }
-                )
+                })
 
                 val newApartment = Json.obj("_id" -> BSONFormats.toJSON(BSONObjectID.generate),
                   "name" -> apartmentData("name").mkString(""),
