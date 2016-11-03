@@ -76,12 +76,13 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
     Future(Ok.sendFile(new java.io.File(s"/home/incode51/IdeaProjects/MongoTest/app/images/$path")).withHeaders(CONTENT_DISPOSITION -> "inline"))
   }
 
-  def createApartment = Action.async {
-    implicit request =>
-      val uid: String = request.session.get("user_id").get
-      val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).one[User])
-      answ.map {
-        case Some(user) => {
+  def createApartment = Logging {
+    Action.async {
+      implicit request =>
+        val uid: String = request.session.get("user_id").get
+        val answ = personsFuture.flatMap(_.find(Json.obj("_id" -> BSONObjectID(uid))).one[User])
+        answ.map {
+          elem =>
           request.body.asMultipartFormData match {
             case Some(apartmentForm) => {
               val apartmentData = apartmentForm.dataParts
@@ -113,8 +114,7 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
             case None => BadRequest("incorrect form2")
           }
         }
-        case None => BadRequest("incorrect form1")
-      }
+    }
   }
 
   def loggedIn = Logging {
@@ -123,10 +123,12 @@ class CityController @Inject()(val reactiveMongoApi: ReactiveMongoApi)(implicit 
     }
   }
 
-  def getAllApartments = Action.async {
-    implicit request =>
-      val answ = personsFuture.flatMap(_.find(Json.obj("apartments" -> Json.obj("$exists" -> "true"))).cursor[JsObject]().collect[List](0))
-      answ.map(elem => { println(elem.map( one => (one \ "apartments").get)); Ok(views.html.logged_in( elem.map( one => (one \ "apartments").as[JsArray]).reduceLeft((a1:JsArray, a2:JsArray) => a1 ++ a2).toString, ""))})
+  def getAllApartments = Logging {
+    Action.async {
+      implicit request =>
+        val answ = personsFuture.flatMap(_.find(Json.obj("apartments" -> Json.obj("$exists" -> "true"))).cursor[JsObject]().collect[List](0))
+        answ.map(elem => { println(elem.map( one => (one \ "apartments").get)); Ok(views.html.logged_in( elem.map( one => (one \ "apartments").as[JsArray]).reduceLeft((a1:JsArray, a2:JsArray) => a1 ++ a2).toString, ""))})
+    }
   }
 
   def getUserInfo(id: String) = Action.async {
